@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SAST Remediation Plan Builder</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+<style>
+:root{
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+  --bg:#f6f7f9; --card:#ffffff; --ink:#15191e; --muted:#616b78;
+  --line:#dfe3e8; --accent:#1f3864; --accent-ink:#ffffff;
+  --soft:#eef1f6; --warn-bg:#fdf3e3; --warn-ink:#8a5a00; --warn-line:#e9c98a;
+  --crit:#c00000; --high:#c2571a; --med:#96700a; --low:#3f6b2b;
+  --ok-bg:#e8f2e8;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#14171c; --card:#1c2128; --ink:#e8ebef; --muted:#9aa4b1;
+    --line:#2d343d; --accent:#6f95d6; --accent-ink:#10141a;
+    --soft:#222932; --warn-bg:#3a2f18; --warn-ink:#f0c674; --warn-line:#5c4a22;
+    --crit:#ff7b72; --high:#ffa657; --med:#e3c04a; --low:#8bd17c;
+    --ok-bg:#1e2e20;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#14171c; --card:#1c2128; --ink:#e8ebef; --muted:#9aa4b1;
+  --line:#2d343d; --accent:#6f95d6; --accent-ink:#10141a;
+  --soft:#222932; --warn-bg:#3a2f18; --warn-ink:#f0c674; --warn-line:#5c4a22;
+  --crit:#ff7b72; --high:#ffa657; --med:#e3c04a; --low:#8bd17c;
+  --ok-bg:#1e2e20;
+}
+*,*::before,*::after{box-sizing:inherit}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  font-size:15px; line-height:1.5;
+}
+.wrap{max-width:1080px; margin:0 auto; padding:24px 16px 64px}
+header h1{font-size:1.45rem; margin:0 0 4px; letter-spacing:-.01em}
+header p{margin:0 0 22px; color:var(--muted); font-size:.92rem}
+.card{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px; margin-bottom:16px}
+.card h2{font-size:.82rem; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); margin:0 0 14px}
+#drop{
+  border:2px dashed var(--line); border-radius:12px; padding:34px 18px; text-align:center;
+  cursor:pointer; transition:border-color .15s, background .15s; background:var(--card);
+}
+#drop.hot{border-color:var(--accent); background:var(--soft)}
+#drop .big{font-size:1.02rem; font-weight:600; margin-bottom:6px}
+#drop .sm{color:var(--muted); font-size:.86rem}
+.files{margin-top:12px; font-size:.86rem; color:var(--muted)}
+.files span{display:inline-block; background:var(--soft); border:1px solid var(--line); border-radius:999px; padding:3px 11px; margin:3px 6px 0 0}
+.grid{display:flex; flex-wrap:wrap; gap:14px}
+.field{flex:1 1 200px; min-width:170px}
+label{display:block; font-size:.78rem; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin-bottom:5px}
+input,select{
+  width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:8px;
+  background:var(--bg); color:var(--ink); font:inherit; font-size:.92rem;
+}
+input:focus,select:focus{outline:2px solid var(--accent); outline-offset:-1px}
+button{
+  font:inherit; font-weight:600; border:none; border-radius:9px; padding:11px 20px;
+  background:var(--accent); color:var(--accent-ink); cursor:pointer;
+}
+button:disabled{opacity:.45; cursor:not-allowed}
+button.ghost{background:transparent; color:var(--ink); border:1px solid var(--line); font-weight:500; padding:9px 15px}
+.row{display:flex; gap:10px; flex-wrap:wrap; align-items:center}
+.stats{display:flex; flex-wrap:wrap; gap:10px; margin-bottom:14px}
+.stat{flex:1 1 110px; background:var(--soft); border:1px solid var(--line); border-radius:10px; padding:10px 12px}
+.stat b{display:block; font-size:1.5rem; line-height:1.2}
+.stat small{color:var(--muted); font-size:.75rem; text-transform:uppercase; letter-spacing:.05em}
+.scroll{overflow-x:auto; -webkit-overflow-scrolling:touch}
+table{border-collapse:collapse; width:100%; font-size:.86rem; min-width:780px}
+th{
+  text-align:left; background:var(--accent); color:var(--accent-ink);
+  padding:9px 10px; font-size:.74rem; text-transform:uppercase; letter-spacing:.05em; white-space:nowrap;
+}
+td{border-bottom:1px solid var(--line); padding:7px 10px; vertical-align:top}
+tr.closed td{background:var(--ok-bg)}
+td.loc{font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.78rem; word-break:break-all; max-width:280px}
+td input,td select{padding:5px 7px; font-size:.83rem; border-radius:6px}
+.sev{font-weight:700}
+.sev.Critical{color:var(--crit)} .sev.High{color:var(--high)}
+.sev.Medium{color:var(--med)} .sev.Low{color:var(--low)}
+.flag{display:inline-block; font-size:.68rem; text-transform:uppercase; letter-spacing:.04em;
+  background:var(--warn-bg); color:var(--warn-ink); border:1px solid var(--warn-line);
+  border-radius:5px; padding:1px 6px; margin-left:6px; white-space:nowrap}
+.notice{background:var(--warn-bg); color:var(--warn-ink); border:1px solid var(--warn-line);
+  border-radius:9px; padding:11px 13px; font-size:.87rem; margin-bottom:14px}
+.notice b{display:block; margin-bottom:3px}
+.hide{display:none}
+.msg{color:var(--muted); font-size:.87rem; margin-top:10px}
+footer{color:var(--muted); font-size:.8rem; text-align:center; margin-top:28px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>SAST Remediation Plan Builder</h1>
+  <p>Drop your GitLab SAST reports &mdash; PDF, Excel or CSV. The plan template is built in, so you get one combined tracker back already filled.</p>
+</header>
+
+<div class="card">
+  <div id="drop">
+    <div class="big">Drop your SAST reports here</div>
+    <div class="sm">PDF, Excel or CSV &middot; several files at once is fine &middot; nothing leaves your browser</div>
+  </div>
+  <div class="files" id="files"></div>
+  <input type="file" id="picker" accept=".pdf,.csv,.xlsx,.xls" multiple class="hide">
+  <div class="msg hide" id="status"></div>
+</div>
+
+<div class="card hide" id="setup">
+  <h2>Squad details</h2>
+  <div class="grid">
+    <div class="field"><label for="squad">Squad</label><input id="squad" placeholder="e.g. MyFawry Backend"></div>
+    <div class="field"><label for="lead">Tech lead</label><input id="lead" placeholder="Full name"></div>
+    <div class="field"><label for="start">Plan start date</label><input id="start" type="date"></div>
+  </div>
+  <div class="msg">Target dates are suggested from the start date: Critical within 1 month, High within 2, Medium within 3. Change any of them below.</div>
+</div>
+
+<div class="card hide" id="result">
+  <h2>Findings</h2>
+  <div id="notices"></div>
+  <div class="stats" id="stats"></div>
+  <div class="scroll"><table>
+    <thead><tr>
+      <th>#</th><th>Finding ID</th><th>Description</th><th>File / Location</th>
+      <th>Repository</th><th>Severity</th><th>Target date</th><th>Status</th>
+    </tr></thead>
+    <tbody id="body"></tbody>
+  </table></div>
+  <div class="row" style="margin-top:16px">
+    <button id="build">Download filled plan</button>
+    <button class="ghost" id="reset">Start over</button>
+  </div>
+  <div class="msg" id="done"></div>
+</div>
+
+<footer>Parsing runs entirely in your browser. Reports are never uploaded anywhere.</footer>
+</div>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+var findings = [], reportDate = "", diagnostic = "", warnings = [], seen = {};
+function $(id){ return document.getElementById(id); }
+
+/* ---------- file intake ---------- */
+var drop = $("drop"), picker = $("picker");
+drop.addEventListener("click", function(){ picker.click(); });
+["dragenter","dragover"].forEach(function(e){
+  drop.addEventListener(e, function(ev){ ev.preventDefault(); drop.classList.add("hot"); });
+});
+["dragleave","drop"].forEach(function(e){
+  drop.addEventListener(e, function(ev){ ev.preventDefault(); drop.classList.remove("hot"); });
+});
+drop.addEventListener("drop", function(ev){ handle(ev.dataTransfer.files); });
+picker.addEventListener("change", function(){ handle(picker.files); });
+
+function extOf(n){ var m = /\.([a-z0-9]+)$/i.exec(n); return m ? m[1].toLowerCase() : ""; }
+
+function handle(list){
+  var files = [], names = [], ignored = [];
+  for (var i = 0; i < list.length; i++){
+    var f = list[i], e = extOf(f.name);
+    if (e === "pdf" || e === "csv" || e === "xlsx" || e === "xls"){ files.push(f); names.push(f.name); }
+    else ignored.push(f.name);
+  }
+  $("files").innerHTML = names.map(function(n){ return "<span>" + esc(n) + "</span>"; }).join("");
+  if (!files.length){
+    say("No usable file found. Drop your SAST report as PDF, Excel or CSV."
+        + (ignored.length ? " The plan template is not needed, it is built in." : ""));
+    return;
+  }
+  say("Reading " + files.length + (files.length > 1 ? " files..." : " file..."));
+  findings = []; reportDate = ""; diagnostic = ""; warnings = []; seen = {};
+
+  var chain = Promise.resolve();
+  files.forEach(function(f){
+    chain = chain.then(function(){ return readOne(f); })
+      .catch(function(err){ warnings.push("Could not read " + f.name + ": " + err.message); });
+  });
+  chain.then(function(){
+    if (!findings.length){
+      say(diagnostic
+        ? "No findings recognised. The files were read, but the layout does not match a SAST report. First text found: \u201c"
+          + diagnostic.slice(0, 120) + "\u2026\u201d"
+        : (warnings.length ? warnings.join(" ")
+           : "No findings recognised in those files. If the PDF is a scan or image export, re-export it from GitLab."));
+      return;
+    }
+    say("");
+    prepare();
+  });
+}
+
+function readOne(file){
+  var e = extOf(file.name);
+  if (e === "pdf") return readPdf(file);
+  if (e === "csv") return readCsv(file);
+  return readSheet(file);
+}
+
+function say(t){
+  var s = $("status");
+  s.textContent = t;
+  s.classList.toggle("hide", !t);
+}
+function esc(s){
+  return String(s == null ? "" : s).replace(/[&<>"]/g, function(c){
+    return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c];
+  });
+}
+
+/* ---------- shared finding intake ---------- */
+function norm(s){
+  var v = String(s || "").trim().toLowerCase();
+  if (!v) return "";
+  if (v.indexOf("crit") === 0) return "Critical";
+  if (v.indexOf("high") === 0) return "High";
+  if (v.indexOf("med") === 0) return "Medium";
+  if (v.indexOf("low") === 0) return "Low";
+  if (v.indexOf("info") === 0) return "Low";
+  return "";
+}
+var STATUSES = ["Open","In Progress","Closed","False Positive","Accepted Risk"];
+function statusOf(state){
+  var v = String(state || "").trim();
+  for (var i = 0; i < STATUSES.length; i++)
+    if (STATUSES[i].toLowerCase() === v.toLowerCase()) return STATUSES[i];
+  return /resolved|dismissed|closed|fixed|mitigated/i.test(v) ? "Closed" : "Open";
+}
+function add(f){
+  if (!f.sev) f.sev = "Medium";
+  f.repo = f.repo || "";
+  f.loc = f.loc || "";
+  f.desc = f.desc || "SAST finding";
+  f.status = f.status || statusOf(f.state);
+  f.target = f.target || "";
+  f.dup = false;
+  var key = f.id ? ("id:" + f.id) : (f.repo + "|" + f.loc + "|" + f.desc);
+  if (seen[key]) return;
+  seen[key] = true;
+  findings.push(f);
+}
+
+/* ---------- csv / excel ---------- */
+function readCsv(file){
+  return file.text().then(function(txt){
+    ingest(splitCsv(txt), file.name);
+  });
+}
+function splitCsv(text){
+  var rows = [], row = [], cur = "", q = false;
+  for (var i = 0; i < text.length; i++){
+    var c = text.charAt(i);
+    if (q){
+      if (c === "\"" ){
+        if (text.charAt(i+1) === "\"" ){ cur += "\""; i++; } else q = false;
+      } else cur += c;
+    }
+    else if (c === "\"" ) q = true;
+    else if (c === "," || c === ";" && text.indexOf(",") === -1){ row.push(cur); cur = ""; }
+    else if (c === "\n"){ row.push(cur); cur = ""; rows.push(row); row = []; }
+    else if (c !== "\r") cur += c;
+  }
+  if (cur !== "" || row.length){ row.push(cur); rows.push(row); }
+  return rows.filter(function(r){
+    return r.some(function(x){ return String(x).trim() !== ""; });
+  });
+}
+function cellText(cell){
+  var v = cell ? cell.value : null;
+  if (v === null || v === undefined) return "";
+  if (v instanceof Date) return v.toISOString().slice(0,10);
+  if (typeof v === "object"){
+    if (v.richText) return v.richText.map(function(t){ return t.text; }).join("");
+    if (v.text !== undefined) return String(v.text);
+    if (v.result !== undefined) return String(v.result);
+    return "";
+  }
+  return String(v);
+}
+function readSheet(file){
+  return file.arrayBuffer().then(function(buf){
+    var wb = new ExcelJS.Workbook();
+    return wb.xlsx.load(buf);
+  }).then(function(wb){
+    var done = false;
+    wb.worksheets.forEach(function(ws){
+      if (done) return;
+      var rows = [];
+      ws.eachRow({includeEmpty:false}, function(row){
+        var r = [];
+        row.eachCell({includeEmpty:true}, function(cell){ r.push(cellText(cell)); });
+        rows.push(r);
+      });
+      if (ingest(rows, file.name)) done = true;
+    });
+  });
+}
+
+var FIELDS = {
+  id:    ["vulnerabilityid","findingid","id"],
+  desc:  ["findingdescription","vulnerability","description","name","title","finding","issue"],
+  sev:   ["severity","risk","riskrating"],
+  state: ["status","state","activity"],
+  loc:   ["fileloc","filelocation","location","file","filepath","path","fullpath"],
+  repo:  ["repository","projectname","project","repo","component"],
+  tgt:   ["targetsolvedate","targetdate","duedate"]
+};
+function flat(h){ return String(h || "").toLowerCase().replace(/[^a-z]/g, ""); }
+function findCol(headers, names){
+  var i, j, h;
+  for (j = 0; j < names.length; j++)
+    for (i = 0; i < headers.length; i++)
+      if (flat(headers[i]) === names[j]) return i;
+  for (j = 0; j < names.length; j++)
+    for (i = 0; i < headers.length; i++){
+      h = flat(headers[i]);
+      if (h && h.indexOf(names[j]) === 0) return i;
+    }
+  return -1;
+}
+function cleanLoc(v){
+  v = String(v || "").trim();
+  if (!v) return "";
+  if (v.charAt(0) === "{"){
+    try {
+      var o = JSON.parse(v);
+      var f = o.file || o.path || o.fileName || "";
+      var l = o.start_line || o.line || (o.lines && o.lines.begin) || "";
+      return f + (l ? " L" + l : "");
+    } catch (e) {}
+  }
+  return v.replace(/\s+/g, " ");
+}
+function ingest(rows, label){
+  var hi = -1, cols = null;
+  for (var r = 0; r < rows.length && r < 40; r++){
+    var sev = findCol(rows[r], FIELDS.sev);
+    if (sev < 0) continue;
+    var c = {};
+    Object.keys(FIELDS).forEach(function(k){ c[k] = findCol(rows[r], FIELDS[k]); });
+    if (c.desc >= 0 && c.desc === c.id) c.desc = -1;
+    if (c.desc < 0 && c.id < 0 && c.loc < 0) continue;
+    hi = r; cols = c; break;
+  }
+  if (hi < 0){
+    if (!diagnostic && rows.length) diagnostic = rows[0].join(" ").slice(0, 200);
+    warnings.push("No severity column found in " + label + ", so it was skipped.");
+    return false;
+  }
+  var before = findings.length;
+  for (var i = hi + 1; i < rows.length; i++){
+    var row = rows[i];
+    var pick = function(ix){ return ix >= 0 && row[ix] !== undefined ? String(row[ix]).trim() : ""; };
+    var sv = norm(pick(cols.sev));
+    var desc = pick(cols.desc), id = pick(cols.id), loc = cleanLoc(pick(cols.loc));
+    if (!sv && !desc && !id && !loc) continue;
+    if (!sv && !desc && !loc) continue;
+    var tgt = pick(cols.tgt);
+    var md = /^(\d{4})-(\d{2})-(\d{2})/.exec(tgt);
+    add({
+      id: id.replace(/^#/, ""),
+      desc: desc,
+      loc: loc,
+      sev: sv,
+      repo: pick(cols.repo),
+      state: pick(cols.state),
+      target: md ? md[0] : "",
+      source: label
+    });
+  }
+  if (findings.length === before) warnings.push("No data rows read from " + label + ".");
+  return true;
+}
+
+function pageText(items){
+  var out = "", prevEnd = null, prevY = null;
+  for (var i = 0; i < items.length; i++){
+    var it = items[i];
+    if (!it.str) continue;
+    var tr = it.transform, x = tr[4], y = tr[5];
+    var h = Math.abs(tr[3]) || Math.abs(tr[0]) || 10;
+    var w = it.width || 0;
+    if (prevY !== null && Math.abs(y - prevY) > h * 0.5) out += " \n ";
+    else if (prevEnd !== null && x - prevEnd > h * 0.17) out += " ";
+    out += it.str;
+    prevEnd = x + w; prevY = y;
+  }
+  return out.replace(/[ \t]+/g, " ");
+}
+
+function readPdf(file){
+  var label = file.name;
+  return file.arrayBuffer().then(function(buf){
+    return pdfjsLib.getDocument({data: buf}).promise;
+  }).then(function(pdf){
+    var pages = [], seq = Promise.resolve();
+    for (var p = 1; p <= pdf.numPages; p++){
+      (function(n){
+        seq = seq.then(function(){
+          return pdf.getPage(n).then(function(pg){ return pg.getTextContent(); })
+            .then(function(tc){ pages.push(pageText(tc.items)); });
+        });
+      })(p);
+    }
+    return seq.then(function(){ parse(pages, label); });
+  });
+}
+
+function parse(pages, label){
+  var all = pages.join(" \n ");
+  var repo = "";
+  var rp = all.match(/Path\s*#\d+\s*(\S+)/) || all.match(/PROJECT\s*#\d+\s*([\w./-]+)/i);
+  if (rp) repo = rp[1].replace(/[^\w./-]+$/, "");
+  var gen = all.match(/GENERATED\s*(\d{2}\/\d{2}\/\d{4})/);
+  if (gen && !reportDate) reportDate = gen[1];
+  var dg = all.match(/Vulnerability total \(digest\)\s*(\d+)/);
+  var digest = dg ? parseInt(dg[1], 10) : null;
+
+  var found = {};
+  pages.forEach(function(t){
+    var id = t.match(/Vulnerability\s*ID\s*#?\s*(\d+)/i);
+    if (!id) return;
+    var title = t.match(/#\d+\s*([A-Za-z][^\n]*?)\s*Project\s*#\d/);
+    var sev   = t.match(/Severity\s*[^A-Za-z]*(Critical|High|Medium|Low|Info)\b/i);
+    var state = t.match(/State\s*(Detected|Confirmed|Resolved|Dismissed)\b/i);
+    var loc   = t.match(/Location\s*(.+?)\s*Vulnerability\s*ID/i);
+    var cwe   = t.match(/cwe:\s*(\d+)/i);
+    found[id[1]] = {
+      id: id[1],
+      desc: (title ? title[1].trim() : "SAST finding") + (cwe ? " (CWE-" + cwe[1] + ")" : ""),
+      loc: loc ? loc[1].replace(/[^\x20-\x7E]+/g, " ").replace(/\s+/g, " ").trim() : "",
+      sev: sev ? norm(sev[1]) : "",
+      state: state ? state[1] : "Detected",
+      repo: repo,
+      source: label
+    };
+  });
+
+  var toc = /(?:^|\s)\d+\s*([A-Za-z][^\n(]*?)\s*\(#(\d+)\)\s*(Critical|High|Medium|Low|Info)/gi, m;
+  while ((m = toc.exec(all)) !== null){
+    if (found[m[2]]){ if (!found[m[2]].sev) found[m[2]].sev = norm(m[3]); }
+    else found[m[2]] = {id:m[2], desc:m[1].trim(), loc:"", sev:norm(m[3]),
+                        state:"Detected", repo:repo, source:label};
+  }
+
+  var keys = Object.keys(found);
+  keys.forEach(function(k){ add(found[k]); });
+
+  if (digest !== null && keys.length && digest > keys.length){
+    warnings.push("<b>" + esc(label) + " looks filtered.</b>The project reports " + digest
+      + " vulnerabilities in total, but only " + keys.length
+      + " are in this export. Re-export with no severity or state filter before treating it as your baseline.");
+  }
+  if (!keys.length && !diagnostic) diagnostic = all.slice(0, 220);
+}
+
+/* ---------- prepare + render ---------- */
+function prepare(){
+  var byLoc = {};
+  findings.forEach(function(f){
+    var k = f.repo + "|" + f.loc + "|" + f.desc;
+    (byLoc[k] = byLoc[k] || []).push(f);
+  });
+  Object.keys(byLoc).forEach(function(k){
+    if (byLoc[k].length > 1) byLoc[k].forEach(function(f){ f.dup = true; });
+  });
+
+  var repos = {}, firstRepo = "";
+  findings.forEach(function(f){ if (f.repo){ repos[f.repo] = 1; if (!firstRepo) firstRepo = f.repo; } });
+  if (firstRepo && !$("squad").value) $("squad").value = firstRepo.split("/")[0].replace(/-/g, " ");
+  if (!$("start").value) $("start").value = new Date().toISOString().slice(0,10);
+  applyTargets();
+
+  $("setup").classList.remove("hide");
+  $("result").classList.remove("hide");
+  render();
+}
+
+function applyTargets(){
+  var base = $("start").value ? new Date($("start").value + "T00:00:00") : new Date();
+  var add = {Critical:30, High:60, Medium:90, Low:0};
+  findings.forEach(function(f){
+    if (f.status === "Closed" || f.touched) return;
+    var n = add[f.sev];
+    if (!n) { f.target = ""; return; }
+    var d = new Date(base.getTime());
+    d.setDate(d.getDate() + n);
+    f.target = d.toISOString().slice(0,10);
+  });
+}
+$("start").addEventListener("change", function(){ applyTargets(); render(); });
+
+function render(){
+  var counts = {Critical:[0,0], High:[0,0], Medium:[0,0], Low:[0,0]};
+  findings.forEach(function(f){
+    counts[f.sev][0]++;
+    if (f.status === "Closed") counts[f.sev][1]++;
+  });
+  var total = findings.length;
+  var closed = findings.filter(function(f){ return f.status === "Closed"; }).length;
+
+  $("stats").innerHTML =
+    stat("Total", total) +
+    ["Critical","High","Medium","Low"].map(function(s){
+      return stat(s, counts[s][0], counts[s][0] - counts[s][1]);
+    }).join("") +
+    stat("Already resolved", closed);
+
+  var notes = warnings.map(function(w){ return "<div class=\"notice\">" + w + "</div>"; });
+  if (findings.some(function(f){ return f.dup; })){
+    notes.push("<div class=\"notice\"><b>Possible duplicates.</b>Some findings share the same repository, file, line and issue type. "
+      + "These are often one defect re-detected by an upgraded scanner rule. Confirm against the code before counting them separately.</div>");
+  }
+  var repoList = {};
+  findings.forEach(function(f){ if (f.repo) repoList[f.repo] = 1; });
+  var nRepos = Object.keys(repoList).length;
+  if (nRepos > 1){
+    notes.push("<div class=\"notice\"><b>" + nRepos + " repositories combined.</b>"
+      + "All findings are merged into one plan sheet. Filter by the Repository column in the file to split them.</div>");
+  }
+  $("notices").innerHTML = notes.join("");
+
+  $("body").innerHTML = findings.map(function(f, i){
+    return "<tr class=\"" + (f.status === "Closed" ? "closed" : "") + "\">"
+      + "<td>" + (i+1) + "</td>"
+      + "<td>" + esc(f.id) + "</td>"
+      + "<td>" + esc(f.desc) + (f.dup ? "<span class=\"flag\">check duplicate</span>" : "") + "</td>"
+      + "<td class=\"loc\">" + esc(f.loc) + "</td>"
+      + "<td class=\"loc\">" + esc(f.repo ? f.repo.split("/").pop() : "") + "</td>"
+      + "<td><span class=\"sev " + f.sev + "\">" + f.sev + "</span></td>"
+      + "<td><input data-i=\"" + i + "\" data-k=\"target\" type=\"date\" value=\"" + esc(f.target) + "\"></td>"
+      + "<td><select data-i=\"" + i + "\" data-k=\"status\">"
+        + ["Open","In Progress","Closed","False Positive","Accepted Risk"].map(function(o){
+            return "<option" + (o === f.status ? " selected" : "") + ">" + o + "</option>";
+          }).join("")
+      + "</select></td></tr>";
+  }).join("");
+}
+function stat(label, n, open){
+  return "<div class=\"stat\"><b>" + n + "</b><small>" + label
+    + (open !== undefined && n ? " &middot; " + open + " open" : "") + "</small></div>";
+}
+
+$("body").addEventListener("input", function(e){
+  var t = e.target, i = t.getAttribute("data-i"), k = t.getAttribute("data-k");
+  if (i === null) return;
+  findings[i][k] = t.value;
+  if (k === "target") findings[i].touched = true;
+  if (k === "status") render();
+});
+
+$("reset").addEventListener("click", function(){
+  findings = []; warnings = []; seen = {}; diagnostic = "";
+  $("files").innerHTML = ""; $("done").textContent = "";
+  $("setup").classList.add("hide"); $("result").classList.add("hide");
+  picker.value = "";
+});
+
+/* ---------- workbook ---------- */
+var NAVY = "FF1F3864", WHITE = "FFFFFFFF", YELLOW = "FFFFF2CC", GREY = "FFF2F2F2";
+var SEVCOL = {Critical:"FFC00000", High:"FFED7D31", Medium:"FFBF8F00", Low:"FF548235"};
+function border(){
+  var t = {style:"thin", color:{argb:"FFBFBFBF"}};
+  return {top:t, left:t, bottom:t, right:t};
+}
+
+$("build").addEventListener("click", function(){
+  $("build").disabled = true;
+  $("done").textContent = "Building...";
+  makeWorkbook().then(function(blob){
+    var squad = ($("squad").value || "squad").trim().replace(/[^\w-]+/g, "-");
+    return saveFile("SAST-Plan-" + squad + ".xlsx", blob);
+  }).then(function(ok){
+    $("done").textContent = ok ? "Done. Check your downloads." : "Download was cancelled.";
+  }).catch(function(err){
+    $("done").textContent = "Could not build the file: " + err.message;
+  }).then(function(){
+    $("build").disabled = false;
+  });
+});
+
+function makeWorkbook(){
+  var wb = new ExcelJS.Workbook();
+  var ws = wb.addWorksheet("Findings", {views:[{showGridLines:false, state:"frozen", ySplit:12}]});
+  var FIRST = 13, LAST = 500;
+
+  ws.getCell("A1").value = "SAST Legacy Findings - Remediation Plan";
+  ws.getCell("A1").font = {name:"Arial", size:14, bold:true, color:{argb:NAVY}};
+  ws.getCell("A2").value = "Generated from the GitLab SAST report. Open items past their target date turn red.";
+  ws.getCell("A2").font = {name:"Arial", size:9, italic:true, color:{argb:"FF595959"}};
+
+  var head = [[4,"Squad", $("squad").value], [5,"Tech Lead", $("lead").value],
+              [6,"Report Run Date", reportDate], [7,"Plan Start Date", $("start").value]];
+  head.forEach(function(h){
+    var r = h[0];
+    ws.getCell("A" + r).value = h[1];
+    ws.getCell("A" + r).font = {name:"Arial", size:10, bold:true};
+    ws.mergeCells("B" + r + ":C" + r);
+    var c = ws.getCell("B" + r);
+    c.value = h[2] || "";
+    c.fill = {type:"pattern", pattern:"solid", fgColor:{argb:YELLOW}};
+    c.font = {name:"Arial", size:10};
+    c.border = border();
+    ws.getCell("C" + r).border = border();
+  });
+
+  ws.getCell("E3").value = "Summary";
+  ws.getCell("E3").font = {name:"Arial", size:10, bold:true, color:{argb:NAVY}};
+  ["Severity","Total","Resolved","Open","Overdue"].forEach(function(h, i){
+    var c = ws.getCell(4, 5 + i);
+    c.value = h;
+    c.font = {name:"Arial", size:10, bold:true, color:{argb:WHITE}};
+    c.fill = {type:"pattern", pattern:"solid", fgColor:{argb:NAVY}};
+    c.alignment = {horizontal:"center"};
+    c.border = border();
+  });
+  var SEV = "$F$" + FIRST + ":$F$" + LAST,
+      TD  = "$G$" + FIRST + ":$G$" + LAST,
+      ST  = "$H$" + FIRST + ":$H$" + LAST;
+  ["Critical","High","Medium","Low"].forEach(function(s, i){
+    var r = 5 + i;
+    ws.getCell(r, 5).value = s;
+    ws.getCell(r, 5).font = {name:"Arial", size:10, bold:true, color:{argb:SEVCOL[s]}};
+    ws.getCell(r, 6).value = {formula:"COUNTIF(" + SEV + ",E" + r + ")"};
+    ws.getCell(r, 7).value = {formula:
+      "COUNTIFS(" + SEV + ",E" + r + "," + ST + ",\"Closed\")+" +
+      "COUNTIFS(" + SEV + ",E" + r + "," + ST + ",\"False Positive\")+" +
+      "COUNTIFS(" + SEV + ",E" + r + "," + ST + ",\"Accepted Risk\")"};
+    ws.getCell(r, 8).value = {formula:"F" + r + "-G" + r};
+    ws.getCell(r, 9).value = {formula:
+      "COUNTIFS(" + SEV + ",E" + r + "," + ST + ",\"<>Closed\"," + ST + ",\"<>False Positive\"," +
+      ST + ",\"<>Accepted Risk\"," + TD + ",\"<\"&TODAY())"};
+  });
+  ws.getCell("E9").value = "Total";
+  ["F","G","H","I"].forEach(function(col){
+    ws.getCell(col + "9").value = {formula:"SUM(" + col + "5:" + col + "8)"};
+  });
+  for (var r = 5; r <= 9; r++){
+    for (var c = 5; c <= 9; c++){
+      var cell = ws.getCell(r, c);
+      cell.border = border();
+      if (!(c === 5 && r < 9)) cell.font = {name:"Arial", size:10, bold:(r === 9)};
+      if (c > 5) cell.alignment = {horizontal:"center"};
+      if (r === 9) cell.fill = {type:"pattern", pattern:"solid", fgColor:{argb:GREY}};
+    }
+  }
+  ws.getCell("K4").value = "% Resolved";
+  ws.getCell("K4").font = {name:"Arial", size:10, bold:true, color:{argb:WHITE}};
+  ws.getCell("K4").fill = {type:"pattern", pattern:"solid", fgColor:{argb:NAVY}};
+  ws.getCell("K4").alignment = {horizontal:"center"};
+  ws.getCell("K5").value = {formula:"IF(F9=0,0,G9/F9)"};
+  ws.getCell("K5").numFmt = "0%";
+  ws.getCell("K5").font = {name:"Arial", size:16, bold:true, color:{argb:NAVY}};
+  ws.getCell("K5").alignment = {horizontal:"center"};
+  ws.getCell("K4").border = border(); ws.getCell("K5").border = border();
+
+  var headers = ["#","Finding ID","Finding Description","Repository","File / Location",
+                 "Severity","Target Solve Date","Status","Actual Close Date"];
+  var widths = [5,14,42,24,36,11,17,15,17];
+  headers.forEach(function(h, i){
+    var c = ws.getCell(12, i + 1);
+    c.value = h;
+    c.font = {name:"Arial", size:10, bold:true, color:{argb:WHITE}};
+    c.fill = {type:"pattern", pattern:"solid", fgColor:{argb:NAVY}};
+    c.alignment = {horizontal:"center", vertical:"middle", wrapText:true};
+    c.border = border();
+    ws.getColumn(i + 1).width = widths[i];
+  });
+  ws.getColumn(1).width = 16;
+  ws.getRow(12).height = 30;
+
+  findings.forEach(function(f, i){
+    var r = FIRST + i;
+    var vals = [i + 1, f.id, f.desc, f.repo, f.loc, f.sev,
+                f.target ? new Date(f.target + "T00:00:00") : null, f.status, null];
+    vals.forEach(function(v, ci){
+      if (v !== null && v !== "") ws.getCell(r, ci + 1).value = v;
+    });
+  });
+
+  for (var rr = FIRST; rr <= LAST; rr++){
+    for (var cc = 1; cc <= 9; cc++){
+      var cel = ws.getCell(rr, cc);
+      cel.border = border();
+      cel.font = {name:"Arial", size:10};
+      cel.alignment = (cc === 1 || cc >= 6)
+        ? {horizontal:"center", vertical:"top"}
+        : {vertical:"top", wrapText:(cc === 3)};
+      if (cc === 7 || cc === 9) cel.numFmt = "dd-mmm-yyyy";
+    }
+    ws.getCell(rr, 6).dataValidation = {
+      type:"list", allowBlank:true, formulae:['"Critical,High,Medium,Low"']};
+    ws.getCell(rr, 8).dataValidation = {
+      type:"list", allowBlank:true,
+      formulae:['"Open,In Progress,Closed,False Positive,Accepted Risk"']};
+  }
+
+  var ref = "A" + FIRST + ":I" + LAST;
+  ws.addConditionalFormatting({ref:ref, rules:[
+    {type:"expression", priority:1,
+     formulae:['AND($G' + FIRST + '<>"",$G' + FIRST + '<TODAY(),$H' + FIRST + '<>"Closed",$H'
+               + FIRST + '<>"False Positive",$H' + FIRST + '<>"Accepted Risk")'],
+     style:{fill:{type:"pattern", pattern:"solid", bgColor:{argb:"FFF8CBAD"}}}},
+    {type:"expression", priority:2,
+     formulae:['$H' + FIRST + '="Closed"'],
+     style:{fill:{type:"pattern", pattern:"solid", bgColor:{argb:"FFE2EFDA"}}}}
+  ]});
+  ws.autoFilter = {from:{row:12, column:1}, to:{row:LAST, column:9}};
+
+  return wb.xlsx.writeBuffer().then(function(buf){
+    return new Blob([buf], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+  });
+}
+
+function saveFile(name, blob){
+  var fallback = function(){ return anchorSave(name, blob); };
+  try {
+    if (!window.claude || !claude.use) return Promise.resolve(fallback());
+    return claude.use("downloads").then(function(dl){
+      if (!dl) return fallback();
+      return dl.save({filename:name, data:blob}).then(function(){ return true; })
+        .catch(function(){ return false; });
+    }).catch(fallback);
+  } catch (e) { return Promise.resolve(fallback()); }
+}
+function anchorSave(name, blob){
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement("a");
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 4000);
+  return true;
+}
+</script>
+</body>
+</html>
