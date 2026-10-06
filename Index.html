@@ -120,7 +120,7 @@ footer{color:var(--muted); font-size:.8rem; text-align:center; margin-top:28px}
     <div class="field"><label for="lead">Tech lead</label><input id="lead" placeholder="Full name"></div>
     <div class="field"><label for="start">Plan start date</label><input id="start" type="date"></div>
   </div>
-  <div class="msg">Target dates are suggested from the start date: Critical within 1 month, High within 2, Medium within 3. Change any of them below.</div>
+  <div class="msg">Target dates are left empty. Fill them in below with your tech lead, or leave them blank and complete them in the downloaded sheet.</div>
 </div>
 
 <div class="card hide" id="result">
@@ -486,26 +486,12 @@ function prepare(){
   findings.forEach(function(f){ if (f.repo){ repos[f.repo] = 1; if (!firstRepo) firstRepo = f.repo; } });
   if (firstRepo && !$("squad").value) $("squad").value = firstRepo.split("/")[0].replace(/-/g, " ");
   if (!$("start").value) $("start").value = new Date().toISOString().slice(0,10);
-  applyTargets();
 
   $("setup").classList.remove("hide");
   $("result").classList.remove("hide");
   render();
 }
 
-function applyTargets(){
-  var base = $("start").value ? new Date($("start").value + "T00:00:00") : new Date();
-  var add = {Critical:30, High:60, Medium:90, Low:0};
-  findings.forEach(function(f){
-    if (f.status === "Closed" || f.touched) return;
-    var n = add[f.sev];
-    if (!n) { f.target = ""; return; }
-    var d = new Date(base.getTime());
-    d.setDate(d.getDate() + n);
-    f.target = d.toISOString().slice(0,10);
-  });
-}
-$("start").addEventListener("change", function(){ applyTargets(); render(); });
 
 function render(){
   var counts = {Critical:[0,0], High:[0,0], Medium:[0,0], Low:[0,0]};
