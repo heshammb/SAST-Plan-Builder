@@ -106,7 +106,7 @@ footer{color:var(--muted); font-size:.8rem; text-align:center; margin-top:28px}
 <div class="card">
   <div id="drop">
     <div class="big">Drop your SAST reports here</div>
-    <div class="sm">PDF, Excel or CSV &middot; several files at once is fine &middot; nothing leaves your browser</div>
+    <div class="sm">PDF, Excel or CSV &middot; drop files one at a time or together, they all add up into one plan &middot; nothing leaves your browser</div>
   </div>
   <div class="files" id="files"></div>
   <input type="file" id="picker" accept=".pdf,.csv,.xlsx,.xls" multiple class="hide">
@@ -120,7 +120,7 @@ footer{color:var(--muted); font-size:.8rem; text-align:center; margin-top:28px}
     <div class="field"><label for="lead">Tech lead</label><input id="lead" placeholder="Full name"></div>
     <div class="field"><label for="start">Plan start date</label><input id="start" type="date"></div>
   </div>
-  <div class="msg">Target dates are suggested from the start date: Critical within 1 month, High within 2, Medium within 3. Change any of them below.</div>
+  <div class="msg">Target dates are left empty. Fill them in below with your tech lead, or leave them blank and complete them in the downloaded sheet.</div>
 </div>
 
 <div class="card hide" id="result">
@@ -148,7 +148,7 @@ footer{color:var(--muted); font-size:.8rem; text-align:center; margin-top:28px}
 pdfjsLib.GlobalWorkerOptions.workerSrc =
   "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 
-var findings = [], reportDate = "", diagnostic = "", warnings = [], seen = {};
+var findings = [], reportDate = "", diagnostic = "", warnings = [], seen = {}, loaded = [];
 function $(id){ return document.getElementById(id); }
 
 /* ---------- file intake ---------- */
@@ -172,14 +172,15 @@ function handle(list){
     if (e === "pdf" || e === "csv" || e === "xlsx" || e === "xls"){ files.push(f); names.push(f.name); }
     else ignored.push(f.name);
   }
-  $("files").innerHTML = names.map(function(n){ return "<span>" + esc(n) + "</span>"; }).join("");
   if (!files.length){
     say("No usable file found. Drop your SAST report as PDF, Excel or CSV."
         + (ignored.length ? " The plan template is not needed, it is built in." : ""));
     return;
   }
+  files.forEach(function(f){ if (loaded.indexOf(f.name) < 0) loaded.push(f.name); });
+  showFiles();
   say("Reading " + files.length + (files.length > 1 ? " files..." : " file..."));
-  findings = []; reportDate = ""; diagnostic = ""; warnings = []; seen = {};
+  diagnostic = "";
 
   var chain = Promise.resolve();
   files.forEach(function(f){
@@ -187,6 +188,7 @@ function handle(list){
       .catch(function(err){ warnings.push("Could not read " + f.name + ": " + err.message); });
   });
   chain.then(function(){
+    picker.value = "";
     if (!findings.length){
       say(diagnostic
         ? "No findings recognised. The files were read, but the layout does not match a SAST report. First text found: \u201c"
@@ -195,9 +197,14 @@ function handle(list){
            : "No findings recognised in those files. If the PDF is a scan or image export, re-export it from GitLab."));
       return;
     }
-    say("");
+    say(findings.length + " findings from " + loaded.length
+        + (loaded.length > 1 ? " files. Drop more files to add them to the same plan." : " file. Drop more files to add them to the same plan."));
     prepare();
   });
+}
+
+function showFiles(){
+  $("files").innerHTML = loaded.map(function(n){ return "<span>" + esc(n) + "</span>"; }).join("");
 }
 
 function readOne(file){
@@ -479,26 +486,12 @@ function prepare(){
   findings.forEach(function(f){ if (f.repo){ repos[f.repo] = 1; if (!firstRepo) firstRepo = f.repo; } });
   if (firstRepo && !$("squad").value) $("squad").value = firstRepo.split("/")[0].replace(/-/g, " ");
   if (!$("start").value) $("start").value = new Date().toISOString().slice(0,10);
-  applyTargets();
 
   $("setup").classList.remove("hide");
   $("result").classList.remove("hide");
   render();
 }
 
-function applyTargets(){
-  var base = $("start").value ? new Date($("start").value + "T00:00:00") : new Date();
-  var add = {Critical:30, High:60, Medium:90, Low:0};
-  findings.forEach(function(f){
-    if (f.status === "Closed" || f.touched) return;
-    var n = add[f.sev];
-    if (!n) { f.target = ""; return; }
-    var d = new Date(base.getTime());
-    d.setDate(d.getDate() + n);
-    f.target = d.toISOString().slice(0,10);
-  });
-}
-$("start").addEventListener("change", function(){ applyTargets(); render(); });
 
 function render(){
   var counts = {Critical:[0,0], High:[0,0], Medium:[0,0], Low:[0,0]};
@@ -560,7 +553,7 @@ $("body").addEventListener("input", function(e){
 });
 
 $("reset").addEventListener("click", function(){
-  findings = []; warnings = []; seen = {}; diagnostic = "";
+  findings = []; warnings = []; seen = {}; diagnostic = ""; loaded = []; reportDate = "";
   $("files").innerHTML = ""; $("done").textContent = "";
   $("setup").classList.add("hide"); $("result").classList.add("hide");
   picker.value = "";
